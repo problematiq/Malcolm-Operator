@@ -16,6 +16,7 @@ import (
 	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel"
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema/defaulting"
+	apiservervalidation "k8s.io/apiextensions-apiserver/pkg/apiserver/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 	celconfigapi "k8s.io/apiserver/pkg/apis/cel"
@@ -82,8 +83,19 @@ func validate(t *testing.T, doc string) field.ErrorList {
 		t.Fatal(err)
 	}
 	defaulting.Default(obj, s)
-	errs, _ := v.Validate(context.Background(), field.NewPath(""), s, obj, nil, celconfigapi.RuntimeCELCostBudget)
-	return errs
+	// OpenAPI checks (patterns, enums, lengths), then the CEL rules.
+	crd := internalCRD(t, loadCRD(t))
+	schema := crd.Spec.Validation
+	if schema == nil {
+		schema = crd.Spec.Versions[0].Schema
+	}
+	sv, _, err := apiservervalidation.NewSchemaValidator(schema.OpenAPIV3Schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := apiservervalidation.ValidateCustomResource(nil, obj, sv)
+	celErrs, _ := v.Validate(context.Background(), field.NewPath(""), s, obj, nil, celconfigapi.RuntimeCELCostBudget)
+	return append(errs, celErrs...)
 }
 
 func TestCELRules(t *testing.T) {
@@ -108,6 +120,11 @@ func TestCELRules(t *testing.T) {
 		{"external postgres without host", `{"spec": {"postgres": {"mode": "external"}}}`, "postgres.external.host is required"},
 		{"unknown component", `{"spec": {"components": {"logstsh": {}}}}`, "unknown component"},
 		{"known component", `{"spec": {"components": {"logstash": {"replicas": 2}}}}`, ""},
+		{"unknown image override", `{"spec": {"image": {"overrides": {"zeeek": "r/z:1"}}}}`, "unknown Malcolm image"},
+		{"known image override", `{"spec": {"image": {"overrides": {"zeek": "r/z:1"}, "tag": "26.10.0"}}}`, ""},
+		{"image with whitespace", `{"spec": {"components": {"zeek-offline": {"image": "r/z 1"}}}}`, "spec.components.zeek-offline.image"},
+		{"bad tag", `{"spec": {"image": {"tag": "a:b"}}}`, "spec.image.tag"},
+		{"component images", `{"spec": {"components": {"arkime": {"image": "r/a:1", "imagePullPolicy": "Always", "containerImages": {"arkime-container": "r/a:2"}}}}}`, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -118,7 +135,7 @@ func TestCELRules(t *testing.T) {
 				}
 				return
 			}
-			if !strings.Contains(errs.ToAggregate().Error(), c.wantErr) {
+			if len(errs) == 0 || !strings.Contains(errs.ToAggregate().Error(), c.wantErr) {
 				t.Errorf("expected %q, got %v", c.wantErr, errs)
 			}
 		})

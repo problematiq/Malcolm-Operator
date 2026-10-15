@@ -13,7 +13,7 @@ Development/production pairs in `values.yaml` (`foo.development.x` / `foo.produc
 | `storage_class_name` | `storage.storageClassName` |
 | `storage.*.<claim>.size` / `.classNameOverride` | `storage.<pcap\|zeek\|suricata\|config\|runtimeLogs\|opensearch\|opensearchBackup\|postgres>.size` / `.storageClassName` |
 | `image.repository`, `image.pullPolicy` | `image.repository`, `image.pullPolicy` |
-| `image.<name>_container_override` | `image.overrides.<image name>` (e.g. `zeek`, `logstash-oss`, `nginx-proxy`) |
+| `image.<name>_container_override` | `image.overrides.<image name>` (e.g. `zeek`, `logstash-oss`, `nginx-proxy`), or `components.<workload>.image` / `.containerImages.<container>` for a single workload |
 | `secret_init.*` | not needed (the operator generates secrets itself) |
 | `auth.username`, `auth.openssl_password`, `auth.htpass_cred` | `auth.adminSecret` (plaintext `username`/`password`; hashes are derived) |
 | `auth.existingSecret`, `usernameKey`, `opensslPassKey`, `htpassCredKey` | `auth.hashedCredentials.{secretName,usernameKey,opensslPasswordKey,htpasswdKey}` |

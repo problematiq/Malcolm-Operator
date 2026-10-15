@@ -457,3 +457,51 @@ func TestParliamentAndCont3xt(t *testing.T) {
 		t.Error("Cont3xt keeps no local data")
 	}
 }
+
+func TestCustomImages(t *testing.T) {
+	res := mustRender(t, newMalcolm(func(s *malcolmv1.MalcolmSpec) {
+		s.Image.Repository = "registry.example.com/malcolm"
+		s.Image.Tag = "26.10.0-custom"
+		s.Image.Overrides = map[string]malcolmv1.ImageReference{"nginx-proxy": "registry.example.com/nginx:parliament"}
+		s.Components = map[string]malcolmv1.ComponentSpec{
+			"zeek-offline": {
+				Image:           "registry.example.com/zeek:main",
+				ContainerImages: map[string]malcolmv1.ImageReference{"zeek-offline-dirinit-container": "registry.example.com/dirinit:1"},
+				ImagePullPolicy: corev1.PullAlways,
+				Sidecars:        raw(corev1.Container{Name: "side", Image: "busybox:1"}),
+			},
+			"arkime": {
+				Image:           "registry.example.com/arkime:main",
+				ContainerImages: map[string]malcolmv1.ImageReference{"arkime-container": "registry.example.com/arkime:pinned", "nope": "x:1"},
+			},
+		}
+	}))
+
+	if img := find[*appsv1.Deployment](res, "api-deployment").Spec.Template.Spec.Containers[0].Image; img != "registry.example.com/malcolm/api:26.10.0-custom" {
+		t.Errorf("spec.image.tag not applied: %s", img)
+	}
+	if img := find[*appsv1.Deployment](res, "nginx-proxy-deployment").Spec.Template.Spec.Containers[0].Image; img != "registry.example.com/nginx:parliament" {
+		t.Errorf("image.overrides not applied: %s", img)
+	}
+	z := find[*appsv1.Deployment](res, "zeek-offline-deployment").Spec.Template.Spec
+	if z.Containers[0].Image != "registry.example.com/zeek:main" || z.Containers[0].ImagePullPolicy != corev1.PullAlways {
+		t.Errorf("zeek main container = %s %s", z.Containers[0].Image, z.Containers[0].ImagePullPolicy)
+	}
+	if len(z.InitContainers) == 0 || z.InitContainers[0].Image != "registry.example.com/dirinit:1" || z.InitContainers[0].ImagePullPolicy != corev1.PullAlways {
+		t.Errorf("zeek init containers = %+v", z.InitContainers)
+	}
+	side := z.Containers[len(z.Containers)-1]
+	if side.Name != "side" || side.Image != "busybox:1" || side.ImagePullPolicy != "" {
+		t.Errorf("user sidecars must be left alone: %+v", side)
+	}
+	if img := find[*appsv1.Deployment](res, "arkime-deployment").Spec.Template.Spec.Containers[0].Image; img != "registry.example.com/arkime:pinned" {
+		t.Errorf("containerImages should win over image: %s", img)
+	}
+	warned := false
+	for _, w := range res.Warnings {
+		warned = warned || strings.Contains(w, `"nope"`)
+	}
+	if !warned {
+		t.Errorf("expected a warning for an unknown container, got %v", res.Warnings)
+	}
+}

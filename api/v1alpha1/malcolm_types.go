@@ -225,19 +225,39 @@ type ImageSpec struct {
 	// +optional
 	PullPolicy corev1.PullPolicy `json:"pullPolicy,omitempty"`
 
+	// Tag replaces the tag of every Malcolm image (default: spec.version), e.g.
+	// for a complete set of custom builds tagged "26.09.0-custom". spec.version
+	// still names the Malcolm release being deployed.
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`
+	// +optional
+	Tag string `json:"tag,omitempty"`
+
 	// PullSecrets are added to every Malcolm pod.
 	// +optional
 	PullSecrets []corev1.LocalObjectReference `json:"pullSecrets,omitempty"`
 
-	// Overrides replaces the full image reference for a given Malcolm image name
-	// (e.g. "zeek": "registry.example.com/malcolm/zeek:custom"). Image names:
+	// Overrides replaces the full image reference for a given Malcolm image name,
+	// in every component that uses it (e.g. "nginx-proxy":
+	// "registry.example.com/malcolm/nginx-proxy:26.09.0-custom"). Image names:
 	// api, arkime, dashboards, dashboards-helper, dirinit, file-upload,
 	// filebeat-oss, filescan, freq, htadmin, keycloak, logstash-oss, netbox,
 	// nginx-proxy, opensearch, pcap-capture, pcap-monitor, postgresql,
 	// strelka-backend, strelka-frontend, strelka-manager, suricata, valkey, zeek.
+	// To replace the image of a single component instead, use
+	// spec.components.<name>.image.
+	// +kubebuilder:validation:MaxProperties=32
+	// +kubebuilder:validation:XValidation:rule="self.all(k, k in ['api','arkime','dashboards','dashboards-helper','dirinit','file-upload','filebeat-oss','filescan','freq','htadmin','keycloak','logstash-oss','netbox','nginx-proxy','opensearch','pcap-capture','pcap-monitor','postgresql','strelka-backend','strelka-frontend','strelka-manager','suricata','valkey','zeek'])",message="unknown Malcolm image name in image.overrides"
 	// +optional
-	Overrides map[string]string `json:"overrides,omitempty"`
+	Overrides map[string]ImageReference `json:"overrides,omitempty"`
 }
+
+// ImageReference is a full container image reference, e.g.
+// registry.example.com/malcolm/nginx-proxy:26.09.0-custom or
+// registry.example.com/malcolm/arkime@sha256:<digest>.
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=512
+// +kubebuilder:validation:Pattern=`^[^\s]+$`
+type ImageReference string
 
 // ProcessSpec configures the in-container unprivileged user.
 type ProcessSpec struct {
@@ -1201,6 +1221,22 @@ type ComponentSpec struct {
 	// Resources for the component's main container.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+	// Image replaces the image of the component's main container (a full image
+	// reference). It takes precedence over spec.image.overrides, so a single
+	// component can run a custom build of a shared image (e.g. only
+	// "parliament", which otherwise uses the "arkime" image).
+	// +optional
+	Image ImageReference `json:"image,omitempty"`
+	// ContainerImages replaces the images of individual containers in the pod,
+	// keyed by container name (init containers included, e.g.
+	// "nginx-dirinit-container"). It takes precedence over image.
+	// +kubebuilder:validation:MaxProperties=16
+	// +optional
+	ContainerImages map[string]ImageReference `json:"containerImages,omitempty"`
+	// ImagePullPolicy for the component's containers (default: spec.image.pullPolicy).
+	// +kubebuilder:validation:Enum=Always;IfNotPresent;Never
+	// +optional
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 	// ContainerResources for other containers in the pod, keyed by container name
 	// (useful for the multi-container zeek-live-remotesensor pod).
 	// +optional

@@ -53,7 +53,7 @@ Every field is optional. An empty `spec` gives the same deployment as `helm inst
 | Field | Purpose |
 |---|---|
 | `profile` | `development` (default) or `production`: heap sizes, worker counts, Suricata memcaps, volume sizes (Helm `is_production`) |
-| `version`, `image` | Malcolm release used as image tag; registry, pull policy, pull secrets, per-image overrides |
+| `version`, `image` | Malcolm release used as image tag; registry, tag, pull policy, pull secrets, per-image overrides (see [Custom images](#custom-images)) |
 | `auth` | `basic`, `ldap`, `keycloak`, `keycloak_remote` or `no_authentication`; admin credentials; required groups/roles |
 | `opensearch` | `opensearch-local` (StatefulSet, 1..n nodes), `opensearch-remote` or `elasticsearch-remote`; secondary store; CA certificate import |
 | `placement` | Node selector, tolerations and capture-node avoidance for all central services |
@@ -112,6 +112,34 @@ spec:
 ```
 
 Component names: `api`, `arkime`, `arkime-live`, `cont3xt`, `dashboards`, `dashboards-helper`, `filebeat`, `filebeat-offline`, `filescan`, `freq`, `htadmin`, `keycloak`, `logstash`, `maxmind-geoip` (GeoIP update Jobs), `netbox`, `nginx-proxy`, `opensearch`, `parliament`, `pcap-capture`, `pcap-monitor`, `postgres`, `postgres-bootstrap`, `strelka-backend`, `strelka-frontend`, `strelka-manager`, `suricata-live`, `suricata-offline`, `upload`, `valkey`, `valkey-cache`, `zeek-live`, `zeek-live-remotesensor`, `zeek-offline`. The CRD rejects unknown names and unknown config groups. Sidecars, init containers and extra volumes are decoded strictly, so a misspelled field is reported in the resource's status.
+
+### Custom images
+
+Images are resolved per container. The first setting that applies wins:
+
+1. `components.<name>.containerImages.<container>`: one container, by name. This includes init containers such as `zeek-offline-dirinit-container`.
+2. `components.<name>.image`: the main container of one workload.
+3. `image.overrides.<image>`: every container that uses that Malcolm image. Keys are image names (`zeek`, `arkime`, `nginx-proxy`, `logstash-oss`, `dirinit`, ...), and unknown keys are rejected.
+4. `<image.repository>/<image>:<image.tag>`. The tag defaults to `version`.
+
+```yaml
+spec:
+  image:
+    repository: registry.example.com/malcolm   # mirror of ghcr.io/idaholab/malcolm
+    tag: 26.10.0-site1                          # instead of spec.version
+    pullSecrets: [{name: registry-creds}]
+    overrides:
+      nginx-proxy: registry.example.com/malcolm/nginx-proxy:26.10.0-parliament
+  components:
+    parliament:                                 # only Parliament, not every arkime container
+      image: registry.example.com/arkime-parliament:5.8
+      imagePullPolicy: Always
+    zeek-live:
+      containerImages:
+        zeek-live-dirinit-container: registry.example.com/malcolm/dirinit:26.10.0
+```
+
+`components.<name>.imagePullPolicy` overrides `image.pullPolicy` for that workload's containers. The operator does not change your `sidecars` and `initContainers`. A `containerImages` key that names no container produces a warning in `status.conditions`. Changing an image rolls the affected pods. Custom images must keep the entrypoints, users and paths of the Malcolm image they replace.
 
 ### Node placement: capture nodes run only capture DaemonSets
 

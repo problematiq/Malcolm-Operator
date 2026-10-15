@@ -204,6 +204,13 @@ func (in *ComponentSpec) DeepCopyInto(out *ComponentSpec) {
 		*out = new(v1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ContainerImages != nil {
+		in, out := &in.ContainerImages, &out.ContainerImages
+		*out = make(map[string]ImageReference, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.ContainerResources != nil {
 		in, out := &in.ContainerResources, &out.ContainerResources
 		*out = make(map[string]v1.ResourceRequirements, len(*in))
@@ -444,7 +451,7 @@ func (in *ImageSpec) DeepCopyInto(out *ImageSpec) {
 	}
 	if in.Overrides != nil {
 		in, out := &in.Overrides, &out.Overrides
-		*out = make(map[string]string, len(*in))
+		*out = make(map[string]ImageReference, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
 		}

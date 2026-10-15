@@ -14,6 +14,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
+
+	malcolmv1 "github.com/idaholab/malcolm-operator/api/v1alpha1"
 )
 
 // --- containers -----------------------------------------------------------
@@ -307,6 +309,7 @@ func (r *renderer) customizePod(component string, t *corev1.PodTemplateSpec) {
 		return
 	}
 	ps := &t.Spec
+	r.customizeImages(component, c, ps)
 	if len(ps.Containers) > 0 {
 		main := &ps.Containers[0]
 		if c.Resources != nil {
@@ -380,6 +383,52 @@ func (r *renderer) customizePod(component string, t *corev1.PodTemplateSpec) {
 			t.Annotations[k] = v
 		}
 	}
+}
+
+// customizeImages applies a component's image settings to the containers the
+// operator renders (before user sidecars and init containers are added):
+// containerImages[container] > image (main container) > spec.image.overrides.
+func (r *renderer) customizeImages(component string, c malcolmv1.ComponentSpec, ps *corev1.PodSpec) {
+	if len(ps.Containers) > 0 && c.Image != "" {
+		ps.Containers[0].Image = string(c.Image)
+	}
+	known := map[string]bool{}
+	for _, list := range [][]corev1.Container{ps.Containers, ps.InitContainers} {
+		for i := range list {
+			ctr := &list[i]
+			known[ctr.Name] = true
+			if img, ok := c.ContainerImages[ctr.Name]; ok {
+				ctr.Image = string(img)
+			}
+			if c.ImagePullPolicy != "" {
+				ctr.ImagePullPolicy = c.ImagePullPolicy
+			}
+		}
+	}
+	for _, name := range sortedImageKeys(c.ContainerImages) {
+		if !known[name] {
+			r.warn("components[%s].containerImages: no container named %q (containers: %s)",
+				component, name, strings.Join(sortedBoolKeys(known), ", "))
+		}
+	}
+}
+
+func sortedImageKeys(m map[string]malcolmv1.ImageReference) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedBoolKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // decodeRaw strictly decodes user-supplied raw objects (sidecars, init
