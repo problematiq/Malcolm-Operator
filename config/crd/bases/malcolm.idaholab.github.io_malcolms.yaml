@@ -403,6 +403,22 @@ spec:
                       description: Affinity replaces the pod's affinity.
                       type: object
                       x-kubernetes-preserve-unknown-fields: true
+                    containerImages:
+                      additionalProperties:
+                        description: |-
+                          ImageReference is a full container image reference, e.g.
+                          registry.example.com/malcolm/nginx-proxy:26.09.0-custom or
+                          registry.example.com/malcolm/arkime@sha256:<digest>.
+                        maxLength: 512
+                        minLength: 1
+                        pattern: ^[^\s]+$
+                        type: string
+                      description: |-
+                        ContainerImages replaces the images of individual containers in the pod,
+                        keyed by container name (init containers included, e.g.
+                        "nginx-dirinit-container"). It takes precedence over image.
+                      maxProperties: 16
+                      type: object
                     containerResources:
                       additionalProperties:
                         description: ResourceRequirements describes the compute resource
@@ -766,6 +782,24 @@ spec:
                         type: object
                         x-kubernetes-preserve-unknown-fields: true
                       type: array
+                    image:
+                      description: |-
+                        Image replaces the image of the component's main container (a full image
+                        reference). It takes precedence over spec.image.overrides, so a single
+                        component can run a custom build of a shared image (e.g. only
+                        "parliament", which otherwise uses the "arkime" image).
+                      maxLength: 512
+                      minLength: 1
+                      pattern: ^[^\s]+$
+                      type: string
+                    imagePullPolicy:
+                      description: 'ImagePullPolicy for the component''s containers
+                        (default: spec.image.pullPolicy).'
+                      enum:
+                      - Always
+                      - IfNotPresent
+                      - Never
+                      type: string
                     initContainers:
                       description: InitContainers run before Malcolm's own init containers
                         (core/v1 Container objects).
@@ -1009,15 +1043,29 @@ spec:
                 properties:
                   overrides:
                     additionalProperties:
+                      description: |-
+                        ImageReference is a full container image reference, e.g.
+                        registry.example.com/malcolm/nginx-proxy:26.09.0-custom or
+                        registry.example.com/malcolm/arkime@sha256:<digest>.
+                      maxLength: 512
+                      minLength: 1
+                      pattern: ^[^\s]+$
                       type: string
                     description: |-
-                      Overrides replaces the full image reference for a given Malcolm image name
-                      (e.g. "zeek": "registry.example.com/malcolm/zeek:custom"). Image names:
+                      Overrides replaces the full image reference for a given Malcolm image name,
+                      in every component that uses it (e.g. "nginx-proxy":
+                      "registry.example.com/malcolm/nginx-proxy:26.09.0-custom"). Image names:
                       api, arkime, dashboards, dashboards-helper, dirinit, file-upload,
                       filebeat-oss, filescan, freq, htadmin, keycloak, logstash-oss, netbox,
                       nginx-proxy, opensearch, pcap-capture, pcap-monitor, postgresql,
                       strelka-backend, strelka-frontend, strelka-manager, suricata, valkey, zeek.
+                      To replace the image of a single component instead, use
+                      spec.components.<name>.image.
+                    maxProperties: 32
                     type: object
+                    x-kubernetes-validations:
+                    - message: unknown Malcolm image name in image.overrides
+                      rule: self.all(k, k in ['api','arkime','dashboards','dashboards-helper','dirinit','file-upload','filebeat-oss','filescan','freq','htadmin','keycloak','logstash-oss','netbox','nginx-proxy','opensearch','pcap-capture','pcap-monitor','postgresql','strelka-backend','strelka-frontend','strelka-manager','suricata','valkey','zeek'])
                   pullPolicy:
                     default: IfNotPresent
                     description: PullPolicy for all Malcolm containers.
@@ -1045,6 +1093,13 @@ spec:
                     default: ghcr.io/idaholab/malcolm
                     description: Repository is the registry/path prefix for Malcolm
                       images.
+                    type: string
+                  tag:
+                    description: |-
+                      Tag replaces the tag of every Malcolm image (default: spec.version), e.g.
+                      for a complete set of custom builds tagged "26.09.0-custom". spec.version
+                      still names the Malcolm release being deployed.
+                    pattern: ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$
                     type: string
                 type: object
               indexLifecycle:

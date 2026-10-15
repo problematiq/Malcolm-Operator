@@ -1,0 +1,12 @@
+apiVersion: v2
+name: malcolm-operator
+description: Kubernetes operator that deploys and manages Malcolm, the network traffic analysis tool suite.
+type: application
+# The release workflow sets version and appVersion from the git tag (v1.2.3 -> 1.2.3).
+version: 0.1.0
+appVersion: "main"
+home: https://github.com/problematiq/Malcolm-Operator
+sources:
+  - https://github.com/problematiq/Malcolm-Operator
+  - https://github.com/idaholab/Malcolm
+keywords: [malcolm, operator, network-security, zeek, suricata, arkime]

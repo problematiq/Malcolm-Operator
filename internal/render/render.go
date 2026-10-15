@@ -293,11 +293,15 @@ func (r *renderer) pullPolicy() corev1.PullPolicy {
 }
 
 // image returns the reference for a Malcolm image name (e.g. "zeek").
+// image returns the reference for a Malcolm image name (e.g. "zeek"):
+// spec.image.overrides, else <repository>/<name>:<tag>. Per-component images
+// (spec.components[*].image and containerImages) are applied in customizePod.
 func (r *renderer) image(name string) string {
 	if o, ok := r.spec.Image.Overrides[name]; ok && o != "" {
-		return o
+		return string(o)
 	}
-	return fmt.Sprintf("%s/%s:%s", strDefault(r.spec.Image.Repository, DefaultImageRepository), name, r.version)
+	return fmt.Sprintf("%s/%s:%s", strDefault(r.spec.Image.Repository, DefaultImageRepository), name,
+		strDefault(r.spec.Image.Tag, r.version))
 }
 
 // --- feature switches ----------------------------------------------------

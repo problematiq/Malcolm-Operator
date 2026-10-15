@@ -1,0 +1,15 @@
+{{- /*
+The CRD lives in templates/ (not crds/) so `helm upgrade` updates it with the
+operator. files/crd.yaml is generated: `make manifests` copies it from
+config/crd/bases.
+*/ -}}
+{{- if .Values.crds.install }}
+{{- $crd := .Files.Get "files/crd.yaml" | fromYaml }}
+{{- $annotations := $crd.metadata.annotations | default dict }}
+{{- if .Values.crds.keep }}
+{{- $_ := set $annotations "helm.sh/resource-policy" "keep" }}
+{{- end }}
+{{- $_ := set $crd.metadata "annotations" $annotations }}
+{{- $_ := set $crd.metadata "labels" (merge ($crd.metadata.labels | default dict) (include "malcolm-operator.labels" . | fromYaml)) }}
+{{ toYaml $crd }}
+{{- end }}
