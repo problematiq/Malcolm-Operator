@@ -310,6 +310,20 @@ Test suites:
 
 Integration suites skip themselves when their tools (`KUBEBUILDER_ASSETS`, or `HELM_BIN` plus `HELM_CHART`) are not configured.
 
+### Continuous integration
+
+[`.github/workflows/ci.yaml`](.github/workflows/ci.yaml) runs on every pull request, every push to `main`, and every `v*` tag. It has two jobs:
+
+1. **Build and test.** Fails if the generated CRD, RBAC or deepcopy code is stale or the code is not gofmt-formatted. Then it runs `go vet`, the build, the unit and CRD tests, envtest, and the Helm parity tests. Parity compares against the Malcolm-Helm commit pinned in `MALCOLM_HELM_REF`. It uploads `dist/install.yaml` as the `install-manifest` workflow artifact.
+2. **Build and publish image.** Runs only if the tests pass. It builds `linux/amd64` and `linux/arm64` images and pushes them to `ghcr.io/<owner>/malcolm-operator`, logging in with the workflow's `GITHUB_TOKEN`. Pull requests build the image without pushing it.
+
+| Event | Image tags |
+|---|---|
+| Push to `main` | `main`, `sha-<commit>` |
+| Tag `v1.2.3` | `1.2.3`, `1.2`, `latest`, `sha-<commit>` |
+
+On the first push, GHCR creates the package as private. Make it public in the package settings, or give your cluster an image pull secret.
+
 ## License
 
 Malcolm and the Malcolm Helm chart are licensed under the Apache License 2.0. See [NOTICE](NOTICE) for the files derived from them.

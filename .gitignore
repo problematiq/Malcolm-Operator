@@ -1,0 +1,4 @@
+# Tools and build output (see Makefile)
+bin/
+dist/
+cover.out
