@@ -1,0 +1,75 @@
+# Malcolm using an existing OpenSearch cluster and PostgreSQL server, with a
+# shared, centrally updated MaxMind GeoIP database for Arkime, and strict
+# placement: capture nodes run only the capture DaemonSets.
+#
+#   kubectl create namespace malcolm
+#   kubectl label namespace malcolm pod-security.kubernetes.io/enforce=privileged
+#   kubectl -n malcolm create secret generic opensearch-credentials \
+#     --from-literal=username=malcolm --from-literal=password='...'
+#   kubectl -n malcolm create secret generic opensearch-ca --from-file=ca.crt=./ca.crt
+#   kubectl -n malcolm create secret generic netbox-db \
+#     --from-literal=username=netbox --from-literal=password='...'
+#   kubectl -n malcolm create secret generic postgres-admin \
+#     --from-literal=username=postgres --from-literal=password='...'
+#   kubectl -n malcolm create secret generic maxmind \
+#     --from-literal=accountID='...' --from-literal=licenseKey='...'
+#
+# Label nodes:
+#   server nodes:  cnaps.io/node-type=Tier-1
+#   capture nodes: cnaps.io/zeek-capture=true, cnaps.io/suricata-capture=true,
+#                  cnaps.io/arkime-capture=true (any combination)
+apiVersion: malcolm.idaholab.github.io/v1alpha1
+kind: Malcolm
+metadata:
+  name: malcolm
+  namespace: malcolm
+spec:
+  profile: production
+
+  placement:
+    server:
+      nodeSelector:
+        cnaps.io/node-type: Tier-1
+      avoidCaptureNodes: true
+
+  opensearch:
+    mode: opensearch-remote
+    url: https://opensearch.example.org:9200
+    credentialsSecret: opensearch-credentials
+    sslCertificateVerification: true
+    caCertificate:
+      name: opensearch-ca
+
+  postgres:
+    mode: external
+    external:
+      host: postgres.example.org
+      port: 5432
+      sslMode: require
+      netbox:
+        database: malcolm_netbox
+        credentialsSecret: netbox-db
+      # Creates the netbox role/database if they do not exist yet.
+      bootstrap:
+        adminCredentialsSecret: postgres-admin
+
+  maxmind:
+    credentialsSecret: maxmind
+    database:
+      enabled: true
+      storage:
+        storageClassName: nfs-client   # ReadWriteMany, reachable from capture nodes
+        size: 1Gi
+
+  storage:
+    storageClassName: nfs-client
+
+  capture:
+    interfaces: ["ens192"]
+    # Optional: taint capture nodes (cnaps.io/capture=true:NoSchedule) so
+    # nothing else can land there, and let the capture DaemonSets tolerate it.
+    tolerations:
+      - key: cnaps.io/capture
+        operator: Equal
+        value: "true"
+        effect: NoSchedule

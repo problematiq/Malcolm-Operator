@@ -1,0 +1,20 @@
+# Minimal Malcolm: development profile, local OpenSearch, Traefik ingress, and
+# live capture on any nodes labeled cnaps.io/{zeek,suricata,arkime}-capture=true.
+# Malcolm's capture pods need hostNetwork, hostPath and NET_ADMIN, so the
+# namespace must allow privileged pods.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: malcolm
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: malcolm.idaholab.github.io/v1alpha1
+kind: Malcolm
+metadata:
+  name: malcolm
+  namespace: malcolm
+spec:
+  profile: development
+  capture:
+    interfaces: ["eth1"]

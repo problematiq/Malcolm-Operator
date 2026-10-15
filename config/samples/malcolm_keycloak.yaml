@@ -1,0 +1,22 @@
+# Malcolm with the embedded Keycloak identity provider and role-based access.
+#
+#   kubectl -n malcolm create secret generic keycloak-client \
+#     --from-literal=secret='<client secret from Keycloak>'
+apiVersion: malcolm.idaholab.github.io/v1alpha1
+kind: Malcolm
+metadata:
+  name: malcolm
+  namespace: malcolm
+spec:
+  auth:
+    mode: keycloak
+    roleBasedAccess: true
+    requireGroups: ["malcolm"]
+  keycloak:
+    authURL: https://malcolm.example.org/keycloak
+    clientID: malcolm
+    clientSecret:
+      name: keycloak-client
+      key: secret
+  ingress:
+    host: malcolm.example.org

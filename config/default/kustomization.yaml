@@ -1,0 +1,13 @@
+# Installs the Malcolm operator into malcolm-operator-system.
+namespace: malcolm-operator-system
+namePrefix: malcolm-operator-
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: malcolm-operator
+    includeSelectors: false
+
+resources:
+  - ../crd
+  - ../rbac
+  - ../manager

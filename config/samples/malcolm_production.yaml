@@ -1,0 +1,80 @@
+# Production-sized Malcolm with explicit credentials, TLS ingress, RWX storage
+# and resource requests for the heavy components.
+#
+#   kubectl create namespace malcolm
+#   kubectl label namespace malcolm pod-security.kubernetes.io/enforce=privileged
+#   kubectl -n malcolm create secret generic malcolm-admin \
+#     --from-literal=username=analyst --from-literal=password='change me'
+#   kubectl -n malcolm create secret tls malcolm-tls --cert=tls.crt --key=tls.key
+apiVersion: malcolm.idaholab.github.io/v1alpha1
+kind: Malcolm
+metadata:
+  name: malcolm
+  namespace: malcolm
+spec:
+  profile: production
+  # Central services on server nodes only; capture nodes run only capture DaemonSets.
+  placement:
+    server:
+      nodeSelector:
+        cnaps.io/node-type: Tier-1
+      avoidCaptureNodes: true
+  # Shared GeoLite2 databases for Arkime, updated centrally (no Internet needed on capture nodes).
+  #   kubectl -n malcolm create secret generic maxmind --from-literal=accountID=... --from-literal=licenseKey=...
+  maxmind:
+    credentialsSecret: maxmind
+    database:
+      enabled: true
+  # Arkime Parliament and Cont3xt (served at /parliament/ and /cont3xt/ by an
+  # nginx image that routes them; see docs/nginx-parliament.conf).
+  arkime:
+    parliament:
+      enabled: true
+    cont3xt:
+      enabled: true
+  image:
+    overrides:
+      nginx-proxy: registry.example.org/malcolm/nginx-proxy:26.09.0-cont3xt
+  auth:
+    adminSecret: malcolm-admin
+  storage:
+    storageClassName: nfs-client
+    pcap:
+      size: 2Ti
+    zeek:
+      size: 500Gi
+    opensearch:
+      storageClassName: local-ssd
+      size: 1Ti
+  ingress:
+    className: nginx
+    host: malcolm.example.org
+    tlsSecretName: malcolm-tls
+  nginx:
+    xForwardedProtoOverride: https
+  netbox:
+    csrfTrustedOrigins: https://malcolm.example.org
+  config:
+    dashboards-helper:
+      MALCOLM_URL: https://malcolm.example.org
+  capture:
+    interfaces: ["ens192", "ens224"]
+    homeNet: ["10.0.0.0/8"]
+    tolerations:
+      - key: dedicated
+        operator: Equal
+        value: sensor
+        effect: NoSchedule
+  logstash:
+    # Leave unset to scale with the number of cnaps.io/node-type=Tier-1 nodes.
+    replicas: 3
+  components:
+    opensearch:
+      resources:
+        requests: {cpu: "8", memory: 48Gi}
+    logstash:
+      resources:
+        requests: {cpu: "8", memory: 20Gi}
+    arkime:
+      resources:
+        requests: {cpu: "2", memory: 4Gi}

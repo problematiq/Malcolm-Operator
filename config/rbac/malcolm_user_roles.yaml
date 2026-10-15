@@ -1,0 +1,30 @@
+# Convenience roles for people who manage Malcolm resources. They aggregate into
+# the built-in admin/edit and view roles.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: malcolm-editor-role
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups: ["malcolm.idaholab.github.io"]
+    resources: ["malcolms"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["malcolm.idaholab.github.io"]
+    resources: ["malcolms/status"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: malcolm-viewer-role
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+  - apiGroups: ["malcolm.idaholab.github.io"]
+    resources: ["malcolms"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["malcolm.idaholab.github.io"]
+    resources: ["malcolms/status"]
+    verbs: ["get"]

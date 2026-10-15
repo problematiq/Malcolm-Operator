@@ -1,0 +1,10 @@
+Malcolm Operator
+
+This project deploys Malcolm (https://github.com/idaholab/Malcolm) and is
+derived from the Malcolm Helm chart (https://github.com/idaholab/Malcolm-Helm).
+The files under internal/render/assets/ (Strelka configuration, wise.ini,
+nginx LDAP and Keycloak configuration samples) and the default configuration
+values in internal/render/defaults.go are taken from those projects.
+
+Malcolm is Copyright (c) Battelle Energy Alliance, LLC and is licensed under
+the Apache License, Version 2.0.

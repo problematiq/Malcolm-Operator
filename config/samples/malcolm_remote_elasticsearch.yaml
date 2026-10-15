@@ -1,0 +1,35 @@
+# Malcolm storing its data in an existing Elasticsearch cluster (e.g. ECK)
+# instead of a local OpenSearch. NetBox and its PostgreSQL are disabled.
+#
+#   kubectl -n malcolm create secret generic es-credentials \
+#     --from-literal=username=malcolm --from-literal=password='...'
+apiVersion: malcolm.idaholab.github.io/v1alpha1
+kind: Malcolm
+metadata:
+  name: malcolm
+  namespace: malcolm
+spec:
+  opensearch:
+    mode: elasticsearch-remote
+    url: https://dataplane-ek-es-http.dataplane-ek.svc:9200
+    credentialsSecret: es-credentials
+    dashboardsURL: http://dataplane-ek-kb-http.dataplane-ek.svc.cluster.local:5601
+    externalDashboardsURL: https://kibana.example.org
+    # Copied into the Malcolm namespace and trusted by Arkime.
+    caCertificate:
+      name: dataplane-ek-es-http-certs-public
+      namespace: dataplane-ek
+  netbox:
+    mode: disabled
+  postgres:
+    enabled: false
+  networkPolicy:
+    enabled: true
+    additionalEgress:
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: dataplane-ek
+        ports:
+          - {protocol: TCP, port: 9200}
+          - {protocol: TCP, port: 5601}
