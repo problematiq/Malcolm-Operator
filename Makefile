@@ -1,6 +1,11 @@
 # Image to build/deploy.
 IMG ?= ghcr.io/idaholab/malcolm-operator:latest
 
+# Helm release used by helm-deploy.
+CHART ?= charts/malcolm-operator
+RELEASE ?= malcolm-operator
+RELEASE_NAMESPACE ?= malcolm-operator-system
+
 # Tool versions.
 CONTROLLER_TOOLS_VERSION ?= v0.22.0
 KUSTOMIZE_VERSION ?= v5.7.1
@@ -35,9 +40,11 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: manifests
-manifests: controller-gen ## Generate the CRD and RBAC manifests.
+manifests: controller-gen ## Generate the CRD and RBAC manifests (also copied into the Helm chart).
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd paths="./..." \
 		output:crd:artifacts:config=config/crd/bases output:rbac:artifacts:config=config/rbac
+	cp config/crd/bases/malcolm.idaholab.github.io_malcolms.yaml $(CHART)/files/crd.yaml
+	cp config/rbac/role.yaml $(CHART)/files/manager-role.yaml
 
 .PHONY: generate
 generate: controller-gen ## Generate DeepCopy implementations.
@@ -56,8 +63,14 @@ test: manifests generate fmt vet ## Run unit and CRD tests (integration suites s
 	go test ./... -coverprofile cover.out
 
 .PHONY: test-envtest
-test-envtest: manifests generate setup-envtest ## Run the integration tests against a real kube-apiserver/etcd.
+test-envtest: manifests generate setup-envtest ## Run the integration tests against a real kube-apiserver/etcd (Helm chart install too, if helm is installed).
+	HELM_BIN="$$(command -v $(HELM) || true)" \
 	KUBEBUILDER_ASSETS="$$($(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./test/envtest/ -v
+
+.PHONY: test-chart
+test-chart: manifests ## Lint the Helm chart and check what it renders.
+	$(HELM) lint --strict $(CHART)
+	HELM_BIN="$$(command -v $(HELM))" go test ./test/chart/ -v
 
 .PHONY: test-parity
 test-parity: ## Compare rendered objects with `helm template` of the Malcolm Helm chart.
@@ -96,6 +109,15 @@ build-installer: manifests generate kustomize ## Write a single install manifest
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 
 ##@ Deployment
+
+.PHONY: helm-deploy
+helm-deploy: ## Install or upgrade the operator with the Helm chart (IMG sets the image).
+	img='$(IMG)'; $(HELM) upgrade --install $(RELEASE) $(CHART) --namespace $(RELEASE_NAMESPACE) --create-namespace \
+		--set image.repository="$${img%:*}" --set image.tag="$${img##*:}"
+
+.PHONY: helm-undeploy
+helm-undeploy: ## Uninstall the Helm release (the CRD and Malcolm resources are kept).
+	$(HELM) uninstall $(RELEASE) --namespace $(RELEASE_NAMESPACE)
 
 .PHONY: install
 install: manifests kustomize ## Install the CRD into the current cluster.

@@ -1,0 +1,83 @@
+# Default values for the Malcolm operator.
+
+image:
+  repository: ghcr.io/problematiq/malcolm-operator
+  # Defaults to the chart's appVersion.
+  tag: ""
+  # Overrides repository and tag with a digest (sha256:...).
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+#  - name: registry-creds
+
+nameOverride: ""
+fullnameOverride: ""
+
+# More than one replica runs hot standbys; leader election is then always on.
+replicaCount: 1
+leaderElection: true
+
+# Namespaces the operator manages. Empty means every namespace.
+watchNamespaces: []
+
+crds:
+  # Install and upgrade the Malcolm CRD with the chart. Turn this off if you
+  # manage the CRD yourself (e.g. `make install` or GitOps).
+  install: true
+  # Keep the CRD on `helm uninstall`. Deleting it deletes every Malcolm
+  # resource in the cluster, and with them the deployments they own.
+  keep: true
+
+rbac:
+  # ClusterRole, ClusterRoleBinding, and leader-election Role for the operator.
+  create: true
+  # ClusterRoles for people who manage Malcolm resources. They aggregate into
+  # the built-in admin/edit and view roles.
+  userRoles: true
+
+serviceAccount:
+  create: true
+  # Defaults to <fullname>-controller-manager.
+  name: ""
+  annotations: {}
+
+metrics:
+  enabled: true
+  port: 8443
+  # Serve metrics over HTTPS, with authentication and authorization by
+  # TokenReview/SubjectAccessReview. Grant <fullname>-metrics-reader to scrapers.
+  secure: true
+
+healthProbePort: 8081
+
+# Extra manager flags, e.g. ["--zap-log-level=debug"].
+extraArgs: []
+extraEnv: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []

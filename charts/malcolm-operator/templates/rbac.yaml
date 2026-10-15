@@ -1,0 +1,136 @@
+{{- if .Values.rbac.create }}
+{{- $fullname := include "malcolm-operator.fullname" . }}
+{{- $sa := include "malcolm-operator.serviceAccountName" . }}
+# Operator permissions. files/manager-role.yaml is generated from the
+# +kubebuilder:rbac markers: `make manifests` copies it from config/rbac.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $fullname }}-manager-role
+  labels:
+    {{- include "malcolm-operator.labels" . | nindent 4 }}
+rules:
+  {{- (.Files.Get "files/manager-role.yaml" | fromYaml).rules | toYaml | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $fullname }}-manager-rolebinding
+  labels:
+    {{- include "malcolm-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $fullname }}-manager-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ $sa }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $fullname }}-leader-election-role
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "malcolm-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $fullname }}-leader-election-rolebinding
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "malcolm-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $fullname }}-leader-election-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ $sa }}
+    namespace: {{ .Release.Namespace }}
+{{- if and .Values.metrics.enabled .Values.metrics.secure }}
+---
+# Lets the manager authenticate and authorize requests to its metrics endpoint.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $fullname }}-metrics-auth-role
+  labels:
+    {{- include "malcolm-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["subjectaccessreviews"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $fullname }}-metrics-auth-rolebinding
+  labels:
+    {{- include "malcolm-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $fullname }}-metrics-auth-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ $sa }}
+    namespace: {{ .Release.Namespace }}
+---
+# Grant this role to whatever scrapes the metrics endpoint (e.g. Prometheus).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $fullname }}-metrics-reader
+  labels:
+    {{- include "malcolm-operator.labels" . | nindent 4 }}
+rules:
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+{{- end }}
+{{- end }}
+{{- if .Values.rbac.userRoles }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "malcolm-operator.fullname" . }}-malcolm-editor-role
+  labels:
+    {{- include "malcolm-operator.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups: ["malcolm.idaholab.github.io"]
+    resources: ["malcolms"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["malcolm.idaholab.github.io"]
+    resources: ["malcolms/status"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "malcolm-operator.fullname" . }}-malcolm-viewer-role
+  labels:
+    {{- include "malcolm-operator.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+  - apiGroups: ["malcolm.idaholab.github.io"]
+    resources: ["malcolms"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["malcolm.idaholab.github.io"]
+    resources: ["malcolms/status"]
+    verbs: ["get"]
+{{- end }}

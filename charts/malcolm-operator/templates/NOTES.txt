@@ -1,0 +1,17 @@
+The Malcolm operator is running in namespace {{ .Release.Namespace }}
+{{- if .Values.watchNamespaces }} and manages namespaces: {{ join ", " .Values.watchNamespaces }}{{ else }} and manages every namespace{{ end }}.
+
+Check that it is ready:
+
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "malcolm-operator.fullname" . }}-controller-manager
+
+Deploy Malcolm in a namespace that allows its privileged capture pods:
+
+  kubectl create namespace malcolm
+  kubectl label namespace malcolm pod-security.kubernetes.io/enforce=privileged
+  kubectl -n malcolm apply -f https://raw.githubusercontent.com/problematiq/Malcolm-Operator/main/config/samples/malcolm_v1alpha1_malcolm.yaml
+  kubectl -n malcolm get malcolm -w
+{{- if not .Values.crds.install }}
+
+crds.install is false: install the Malcolm CRD separately before creating Malcolm resources.
+{{- end }}

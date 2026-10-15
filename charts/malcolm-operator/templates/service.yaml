@@ -1,0 +1,19 @@
+{{- if .Values.metrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  # Service names are limited to 63 characters.
+  name: {{ include "malcolm-operator.fullname" . | trunc 55 | trimSuffix "-" }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "malcolm-operator.labels" . | nindent 4 }}
+    {{- include "malcolm-operator.selectorLabels" . | nindent 4 }}
+spec:
+  ports:
+    - name: {{ ternary "https" "http" .Values.metrics.secure }}
+      port: {{ .Values.metrics.port }}
+      protocol: TCP
+      targetPort: metrics
+  selector:
+    {{- include "malcolm-operator.selectorLabels" . | nindent 4 }}
+{{- end }}

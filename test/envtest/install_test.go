@@ -30,21 +30,43 @@ import (
 	"github.com/idaholab/malcolm-operator/internal/controller"
 )
 
-const operatorSA = "system:serviceaccount:malcolm-operator-system:malcolm-operator-controller-manager"
-
 // TestInstallManifestsAndRBAC applies the kustomize install bundle, then runs
 // the manager as the operator's ServiceAccount, so any permission missing from
 // config/rbac surfaces as a failure.
 func TestInstallManifestsAndRBAC(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	kubectl := filepath.Join(os.Getenv("KUBEBUILDER_ASSETS"), "kubectl")
 	out, err := exec.Command(kubectl, "kustomize", filepath.Join("..", "..", "config", "default")).Output()
 	if err != nil {
 		t.Fatalf("kubectl kustomize: %v", err)
 	}
-	reader := utilyaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(out)))
+	installAndReconcile(t, out, 14, "malcolm-operator-system", "malcolm-operator-controller-manager", "mal-rbac")
+}
+
+// TestHelmChartInstallAndRBAC does the same with the Helm chart. It uses its
+// own release and namespaces, so RBAC left by the kustomize test cannot help.
+func TestHelmChartInstallAndRBAC(t *testing.T) {
+	helm := os.Getenv("HELM_BIN")
+	if helm == "" {
+		t.Skip("HELM_BIN is not set")
+	}
+	const opNS = "mo-helm-system"
+	out, err := exec.Command(helm, "template", "mo-helm", filepath.Join("..", "..", "charts", "malcolm-operator"),
+		"--namespace", opNS).Output()
+	if err != nil {
+		t.Fatalf("helm template: %v", err)
+	}
+	createNamespace(t, opNS) // `helm install --create-namespace` does this
+	installAndReconcile(t, out, 13, opNS, "mo-helm-malcolm-operator-controller-manager", "mal-helm-rbac")
+}
+
+// installAndReconcile applies an install bundle, then runs the manager while
+// impersonating the bundle's ServiceAccount and reconciles a Malcolm that
+// exercises every kind of object the operator manages.
+func installAndReconcile(t *testing.T, bundle []byte, wantObjects int, opNS, serviceAccount, ns string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	reader := utilyaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(bundle)))
 	applied := 0
 	for {
 		doc, err := reader.Read()
@@ -66,12 +88,12 @@ func TestInstallManifestsAndRBAC(t *testing.T) {
 		}
 		applied++
 	}
-	if applied != 14 {
-		t.Fatalf("install bundle has %d objects, want 14", applied)
+	if applied != wantObjects {
+		t.Fatalf("install bundle has %d objects, want %d", applied, wantObjects)
 	}
 
-	ns := "mal-rbac"
 	createNamespace(t, ns)
+	operatorSA := "system:serviceaccount:" + opNS + ":" + serviceAccount
 	cfg := rest.CopyConfig(restConfig)
 	cfg.Impersonate = rest.ImpersonationConfig{UserName: operatorSA, Groups: []string{"system:serviceaccounts", "system:authenticated"}}
 
@@ -91,7 +113,7 @@ func TestInstallManifestsAndRBAC(t *testing.T) {
 		Controller:              config.Controller{SkipNameValidation: ptr.To(true)},
 		LeaderElection:          true,
 		LeaderElectionID:        "malcolm-operator.malcolm.idaholab.github.io",
-		LeaderElectionNamespace: "malcolm-operator-system",
+		LeaderElectionNamespace: opNS,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -17,8 +17,11 @@ It deploys the same workloads as the [Malcolm Helm chart](https://github.com/ida
 ## Quick start
 
 ```bash
-# 1. Install the CRD and the operator (the image must be built and pushed first, see "Development").
-make deploy IMG=<registry>/malcolm-operator:<tag>
+# 1. Install the CRD and the operator with the Helm chart (see charts/malcolm-operator).
+helm install malcolm-operator oci://ghcr.io/problematiq/charts/malcolm-operator \
+  --version <version> --namespace malcolm-operator-system --create-namespace
+#    From a checkout: helm install malcolm-operator charts/malcolm-operator -n malcolm-operator-system --create-namespace
+#    Without Helm:    make deploy IMG=<registry>/malcolm-operator:<tag>
 
 # 2. Create a namespace that allows Malcolm's privileged capture pods.
 kubectl create namespace malcolm
@@ -293,6 +296,8 @@ make build          # bin/manager
 make run            # run against the current kubeconfig
 make docker-build docker-push IMG=...
 make build-installer IMG=...   # dist/install.yaml
+make helm-deploy IMG=...       # install/upgrade with the Helm chart
+make test-chart                # lint and render-check the Helm chart
 ```
 
 Test suites:
@@ -301,11 +306,12 @@ Test suites:
 * `internal/controller`: reconciles against controller-runtime's fake client (server-side apply). Covers secret generation and stability, adoption of Helm-generated passwords, admin re-hashing, missing inputs, the single-instance rule, pruning, Logstash node-label sizing, and PVC immutability.
 * `internal/credentials`: MD5-crypt checked against `openssl passwd -1` vectors, and bcrypt checked against the chart's `htpasswd` hash.
 * `test/crd`: the generated CRD validated with the API server's own validation, the behaviour of each CEL rule, and every sample.
+* `test/chart` (`make test-chart`): the operator's Helm chart. The CRD and RBAC rules must equal the generated ones, a default release must create the same objects as the kustomize bundle, and the values must take effect.
 * `test/envtest` (`make test-envtest`): runs against a real kube-apiserver and etcd (no kubelet).
   * Five configurations must be accepted by API-server validation and reconcile idempotently.
   * Covers CEL enforcement, spec updates with pruning and scoped rollouts, blocked resizes, and taking over Helm-created objects.
   * Runs the real manager (watches, caches, predicates) through node labeling, admin password edits, drift correction and the transition to `Ready`.
-  * Applies the kustomize install bundle and runs the manager impersonating the operator's ServiceAccount, so missing RBAC fails the test.
+  * Applies the kustomize install bundle and the Helm chart, and for each runs the manager impersonating the operator's ServiceAccount, so missing RBAC fails the test.
 * `test/parity` (`make test-parity`): diffs the operator against `helm template` of the chart in 12 scenarios (profiles, Keycloak, pre-hashed auth, ILM, PCAP capture, Istio, NetBox disabled, multi-node OpenSearch, sidecars/coverage, …). Intentional differences are listed in the test with reasons. One of them is a chart bug: in production, `SURICATA_AF_PACKET_BLOCK_SIZE` renders as `1.048576e+06`.
 
 Integration suites skip themselves when their tools (`KUBEBUILDER_ASSETS`, or `HELM_BIN` plus `HELM_CHART`) are not configured.
@@ -314,13 +320,15 @@ Integration suites skip themselves when their tools (`KUBEBUILDER_ASSETS`, or `H
 
 [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml) runs on every pull request, every push to `main`, and every `v*` tag. It has two jobs:
 
-1. **Build and test.** Fails if the generated CRD, RBAC or deepcopy code is stale or the code is not gofmt-formatted. Then it runs `go vet`, the build, the unit and CRD tests, envtest, and the Helm parity tests. Parity compares against the Malcolm-Helm commit pinned in `MALCOLM_HELM_REF`. It uploads `dist/install.yaml` as the `install-manifest` workflow artifact.
+1. **Build and test.** Fails if the generated CRD, RBAC or deepcopy code (including the copies in the Helm chart) is stale or the code is not gofmt-formatted. Then it runs `go vet`, the build, the unit and CRD tests, the chart lint and render tests, envtest (which installs both the kustomize bundle and the chart), and the Helm parity tests. Parity compares against the Malcolm-Helm commit pinned in `MALCOLM_HELM_REF`. It uploads `dist/install.yaml` as the `install-manifest` workflow artifact.
 2. **Build and publish image.** Runs only if the tests pass. It builds `linux/amd64` and `linux/arm64` images and pushes them to `ghcr.io/<owner>/malcolm-operator`, logging in with the workflow's `GITHUB_TOKEN`. Pull requests build the image without pushing it.
 
 | Event | Image tags |
 |---|---|
 | Push to `main` | `main`, `sha-<commit>` |
 | Tag `v1.2.3` | `1.2.3`, `1.2`, `latest`, `sha-<commit>` |
+
+On `v*` tags a third job packages the Helm chart with that version (chart `version` and `appVersion`) and pushes it to `oci://ghcr.io/<owner>/charts/malcolm-operator`.
 
 On the first push, GHCR creates the package as private. Make it public in the package settings, or give your cluster an image pull secret.
 
